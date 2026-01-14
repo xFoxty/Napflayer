@@ -1,0 +1,56 @@
+const mineflayer = require("mineflayer");
+
+// 存储机器人实例
+const bots = new Map();
+
+/**
+ * 异步创建机器人
+ * @param {Object} config 配置信息
+ * @param {Function} msgFn QQ 消息发送回调
+ */
+async function createBot(config, msgFn) {
+    const { server, port, version, email, qq:qqNumber } = config;
+
+    return new Promise((resolve, reject) => {
+        console.log(`正在为 QQ:${qqNumber} 初始化机器人...`);
+
+        const bot = mineflayer.createBot({
+            host: server,
+            port: port || 25565,
+            version: version,
+            auth: "microsoft",
+            username: email,
+            onMsaCode: (data) => {
+                console.log("收到微软验证数据:", data);
+                msgFn(`🔐 [微软验证]\n${data.message}`);
+            }
+        });
+
+        bot.once("login", () => {
+            console.log(`${email} 登录成功!`);
+            bots.set(qqNumber, bot);
+            msgFn(`✅ 机器人 [${bot.username}] 已成功进入服务器！`);
+            resolve(bot); // 只有登录成功了，await 才会结束
+        });
+
+        bot.once("error", (err) => {
+            console.error("连接出错:", err);
+            msgFn(`❌ 连接出错: ${err.message}`);
+            reject(err);
+        });
+// TODO: 获取聊天 id
+        bot.on("messagestr", ( message) => {
+            const text = message.toString();
+            msgFn(`💬 ${text}`);
+        });
+
+        // 监听断开连接
+        bot.on("end", (reason) => {
+            console.log(`机器人断开连接: ${reason}`);
+            bots.delete(qqNumber);
+            msgFn(`⚠️ 机器人已掉线: ${reason}`);
+        });
+    });
+}
+
+module.exports = { createBot, getBot: (qq) => bots.get(qq) };

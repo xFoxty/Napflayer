@@ -1,0 +1,10 @@
+{
+  "ignore": [
+    "/db/config.json",
+    "*.test.js",
+    "node_modules",
+    "./data/*.json"
+  ],
+  "watch": ["src/"],
+  "ext": "js,json"
+}
