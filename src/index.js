@@ -1,5 +1,4 @@
 require('dotenv').config()
-console.log(process);
 
 const WebSocket = require("ws");
 const { initDB } = require("./db.js");
@@ -12,13 +11,6 @@ const ws = new WebSocket(process.env.WS_URL);
 async function run() {
   await initDB();
   let ping = null;
-  ws.on("open", () => {
-    console.log("连接成功");
-    ping = setInterval(() => {
-      // 保持心跳
-      // ws.send(JSON.stringify({ type: "heartbeat" }));
-    }, 30000);
-  });
   ws.on("error", (err) => {
     console.log("连接错误", err);
     clearInterval(ping);
