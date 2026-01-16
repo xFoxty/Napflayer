@@ -28,7 +28,7 @@ async function run() {
       event.message_type === "private" &&
       event.sub_type === "friend" &&
       event.message.length === 1 &&
-      event.raw_message.startsWith("#")
+      (event.raw_message.startsWith("#") || event.raw_message.startsWith("~"))
     ) {
       const result = {
         qqNumber: event.user_id,

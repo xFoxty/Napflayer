@@ -1,4 +1,5 @@
-const { getDB } = require("./db.js");
+//消息缓存
+const messageBuffers = new Map();
 const helpMessage = `支持的命令有：
 #help - 查看帮助
 #clear - 清理配置
@@ -10,20 +11,57 @@ const helpMessage = `支持的命令有：
 #version <游戏版本> - 设置游戏版本 例如 1.20.4 默认 1.21.8
 #join - 连接服务器
 #leave - 断开连接
+#chat-on - 开启聊天转发
+#chat-off - 关闭聊天转发
+~<消息内容> - 发送聊天消息
 `;
-const { createBot } = require("./manager.js");
+const {
+  init,
+  status,
+  config,
+  clear,
+  chat,
+  leave,
+  join,
+  editConfig,
+} = require("./store.js");
+
+function sendOptimized(qqNumber, ws, content) {
+  if (!messageBuffers.has(qqNumber)) {
+    messageBuffers.set(qqNumber, {
+      messages: [],
+      timer: null,
+    });
+  }
+
+  const buffer = messageBuffers.get(qqNumber);
+  buffer.messages.push(content);
+  if (!buffer.timer) {
+    buffer.timer = setTimeout(() => {
+      const finalMessage = buffer.messages.join("\n");
+      if (ws.readyState === 1) {
+        ws.send(
+          JSON.stringify({
+            action: "send_msg",
+            params: {
+              type: "private",
+              user_id: qqNumber,
+              message: finalMessage,
+            },
+          })
+        );
+      }
+      messageBuffers.delete(qqNumber);
+      console.log(
+        `[Buffer] 已合并发送 ${buffer.messages.length} 条消息给 ${qqNumber}`
+      );
+    }, 1000);
+
+  }
+}
 async function handle(ws, data) {
   const { qqNumber, msg } = data;
-
-  // 辅助发送函数
-  const send = (content) =>
-    ws.send(
-      JSON.stringify({
-        action: "send_msg",
-        params: { type: "private", user_id: qqNumber, message: content },
-      })
-    );
-
+  const send = sendOptimized.bind(null, qqNumber, ws);
   try {
     switch (msg) {
       case "#init": {
@@ -36,6 +74,11 @@ async function handle(ws, data) {
         send(res.success ? "清理配置完成" : res.message);
         break;
       }
+      case "status":{
+        const res = await status(qqNumber);
+        send(res.message);
+        break
+      }
       case "#join": {
         // 连接服务器
         try {
@@ -45,7 +88,18 @@ async function handle(ws, data) {
         break;
       }
       case "#leave": {
-        // 断开连接
+        const res = await leave(qqNumber);
+        send(res.success ? "已断开连接" : res.message);
+        break;
+      }
+      case "#chat-on": {
+        const res = await editConfig(qqNumber, "chat", true);
+        send(res.success ? "聊天转发已开启" : res.message);
+        break;
+      }
+      case "#chat-off": {
+        const res = await editConfig(qqNumber, "chat", false);
+        send(res.success ? "聊天转发已关闭" : res.message);
         break;
       }
       case "#config": {
@@ -57,9 +111,22 @@ async function handle(ws, data) {
         send(helpMessage);
         break;
       default:
+        if (msg.startsWith("~")) {
+          const message = msg.substring(1);
+          const res = await chat(qqNumber, message);
+          if (!res.success) {
+            send(res.message);
+            break;
+          }
+          if (!res.success) {
+            send(res.message);
+          }
+          break;
+        }
         const parts = msg.split(" ");
         if (parts.length !== 2) {
           send("未知指令，请发送 #help 查看帮助");
+          break;
         }
         if (msg.startsWith("#email")) {
           const emailAddress = parts[1];
@@ -93,60 +160,5 @@ async function handle(ws, data) {
     console.error("处理指令出错:", e);
     send("服务器内部错误");
   }
-}
-async function getUsers() {
-  const db = await getDB();
-  db.data ||= { users: [] };
-  db.data.users ||= [];
-  return { db, users: db.data.users };
-}
-async function editConfig(number, key, value) {
-  const { db, users } = await getUsers();
-  const user = users.find((u) => u.qq === number);
-  if (user) {
-    user[key] = value;
-    await db.write();
-    return { success: true };
-  }
-  throw { success: false, message: "用户不存在" };
-}
-async function init(number) {
-  const { db, users } = await getUsers();
-
-  if (users.some((u) => u.qq === number)) {
-    return { success: false, message: "配置已经存在" };
-  }
-
-  users.push({ qq: number, createdAt: Date.now() });
-  await db.write();
-  return { success: true };
-}
-
-async function clear(number) {
-  const { db, users } = await getUsers();
-  const index = users.findIndex((u) => u.qq === number);
-
-  if (index === -1) {
-    return { success: false, message: "配置不存在" };
-  }
-
-  users.splice(index, 1);
-  await db.write();
-  return { success: true };
-}
-
-async function config(number) {
-  const { users } = await getUsers();
-  const user = users.find((u) => u.qq === number);
-
-  if (!user) {
-    return { success: false, message: "配置不存在" };
-  }
-  return { success: true, data: user };
-}
-async function join(number, msgFn) {
-  const cc = await config(number);
-  const bot = await createBot(cc.data, msgFn);
-  return bot;
 }
 module.exports = { handle };
