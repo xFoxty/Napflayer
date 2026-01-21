@@ -74,7 +74,7 @@ async function handle(ws, data) {
         send(res.success ? "清理配置完成" : res.message);
         break;
       }
-      case "status":{
+      case "#status":{
         const res = await status(qqNumber);
         send(res.message);
         break

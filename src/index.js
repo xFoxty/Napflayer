@@ -1,5 +1,4 @@
 require('dotenv').config()
-
 const WebSocket = require("ws");
 const { initDB } = require("./db.js");
 if (!process.env.WS_URL) {

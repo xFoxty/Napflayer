@@ -1,0 +1,4 @@
+[[mgr.append_keymap]]
+on  = "e"
+run = "shell -- code \"$@\" --reuse-window"
+desc = "Edit in VS Code"
